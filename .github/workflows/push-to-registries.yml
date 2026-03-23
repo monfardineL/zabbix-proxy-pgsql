@@ -1,0 +1,75 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - registry: ghcr.io
+            image_base: ghcr.io/${{ github.repository }}
+            username: ${{ github.actor }}
+            password_secret: GITHUB_TOKEN
+          - registry: docker.io
+            image_base: monfardinel/zabbix-proxy-pgsql
+            username_secret: DOCKERHUB_USERNAME
+            password_secret: DOCKERHUB_TOKEN
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Versions and OS
+        id: vars
+        run: |
+          # Extract values from Dockerfile
+          OS_FULL=$(grep '^ARG OS_BASE_IMAGE=' Dockerfile | cut -d'=' -f2)
+          OS_NAME=$(echo $OS_FULL | cut -d':' -f1)
+          
+          MAJOR_VERSION=$(grep '^ARG MAJOR_VERSION=' Dockerfile | cut -d'=' -f2)
+          
+          # Handle the possible ZBX_VERSION=${MAJOR_VERSION}.8 format
+          ZBX_VERSION_RAW=$(grep '^ARG ZBX_VERSION=' Dockerfile | cut -d'=' -f2)
+          ZBX_VERSION=$(echo $ZBX_VERSION_RAW | sed "s/\${MAJOR_VERSION}/$MAJOR_VERSION/")
+          
+          echo "os_name=$OS_NAME" >> $GITHUB_OUTPUT
+          echo "major_version=$MAJOR_VERSION" >> $GITHUB_OUTPUT
+          echo "zbx_version=$ZBX_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Log in to ${{ matrix.registry }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ matrix.registry }}
+          username: ${{ matrix.username || secrets[matrix.username_secret] }}
+          password: ${{ secrets[matrix.password_secret] }}
+
+      - name: Prepare Image Base Name
+        id: image_base
+        run: |
+          # Lowercase the image base name for compatibility
+          IMAGE_LOWER=$(echo "${{ matrix.image_base }}" | tr '[:upper:]' '[:lower:]')
+          echo "full_name=$IMAGE_LOWER" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image_base.outputs.full_name }}:${{ steps.vars.outputs.os_name }}-${{ steps.vars.outputs.major_version }}
+            ${{ steps.image_base.outputs.full_name }}:${{ steps.vars.outputs.os_name }}-${{ steps.vars.outputs.zbx_version }}
+          build-args: |
+            MAJOR_VERSION=${{ steps.vars.outputs.major_version }}
+            ZBX_VERSION=${{ steps.vars.outputs.zbx_version }}
+
