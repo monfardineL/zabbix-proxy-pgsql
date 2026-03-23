@@ -107,7 +107,9 @@ LABEL org.opencontainers.image.authors="Alexey Pustovalov <alexey.pustovalov@zab
       org.opencontainers.image.title="Zabbix proxy (PostgreSQL)" \
       org.opencontainers.image.url="https://zabbix.com/" \
       org.opencontainers.image.vendor="Zabbix SIA" \
-      org.opencontainers.image.version="${ZBX_VERSION}"
+      org.opencontainers.image.version="${ZBX_VERSION}" \
+      org.opencontainers.image.source="https://github.com/monfardineL/zabbix-proxy-pgsql"
+
 
 STOPSIGNAL SIGTERM
 
